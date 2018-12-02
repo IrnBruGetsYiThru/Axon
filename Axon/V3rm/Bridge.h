@@ -7,6 +7,7 @@
 #include "r_lua.h"
 extern "C" {
 #include "Lua\lua.h"
+#include "Lua\lapi.h"
 #include "Lua\lua.hpp"
 #include "Lua\lualib.h"
 #include "Lua\lstate.h"
