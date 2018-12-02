@@ -1,18 +1,20 @@
 #pragma once
+
 #include "globals.h"
+#include "r_lua.h"
+
 #include <string>
 #include <vector>
 #include <unordered_map>
 
-#include "r_lua.h"
 extern "C" {
-#include "Lua\lua.h"
-#include "Lua\lua.hpp"
-#include "Lua\lualib.h"
-#include "Lua\lstate.h"
-#include "Lua\lauxlib.h"
-#include "Lua\luaconf.h"
-#include "Lua\llimits.h"
+	#include "Lua\lua.h"
+	#include "Lua\lapi.h"
+	#include "Lua\lualib.h"
+	#include "Lua\lstate.h"
+	#include "Lua\lauxlib.h"
+	#include "Lua\luaconf.h"
+	#include "Lua\llimits.h"
 }
 
 
@@ -42,10 +44,8 @@ namespace Bridge
 
 namespace Bridge
 {
-    extern "C" TValue *index2adr (lua_State *L, int idx);
-
     void pushObject(DWORD pRobloxState, TValue *value) {
-        auto &top = *reinterpret_cast<TValue**>(reinterpret_cast<std::uintptr_t>(pVanilla_state) + R_LUA_TOP);
+        auto &top = *(TValue**)(pRobloxState + R_LUA_TOP);
 
         *top = *value;
         ++top;
@@ -62,34 +62,31 @@ namespace Bridge
 	{
 		switch (ex->ExceptionRecord->ExceptionCode)
 		{
-		case (DWORD)0x80000003L:
-		{
-			if (ex->ContextRecord->Eip == int3breakpoints[0])
+			case (DWORD)0x80000003L: // breakpoint
 			{
-				ex->ContextRecord->Eip = (DWORD)(Bridge::rbxFunctionBridge);
-				return EXCEPTION_CONTINUE_EXECUTION;
-			}
+				if (ex->ContextRecord->Eip == int3breakpoints[0])
+				{
+					ex->ContextRecord->Eip = (DWORD)(Bridge::rbxFunctionBridge);
+					return EXCEPTION_CONTINUE_EXECUTION;
+				}
 
-			if (ex->ContextRecord->Eip == int3breakpoints[1])
-			{
-				ex->ContextRecord->Eip = (DWORD)(Bridge::resumea);
-				return EXCEPTION_CONTINUE_EXECUTION;
+				if (ex->ContextRecord->Eip == int3breakpoints[1])
+				{
+					ex->ContextRecord->Eip = (DWORD)(Bridge::resumea);
+					return EXCEPTION_CONTINUE_EXECUTION;
+				}
 			}
-			return -1;
 		}
-		default: return 0;
-		}
-		return 0;
+		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
 	DWORD locateINT3() {
 		DWORD _s = x(0x400000);
 		const char i3_8opcode[8] = { 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC };
-		for (int i = 0; i < MAX_INT; i++) {
-			if (memcmp((void*)(_s + i), i3_8opcode, sizeof(i3_8opcode)) == 0) {
+		for (int i = 0; i < MAX_INT; i++) 			
+			if (memcmp((void*)(_s + i), i3_8opcode, sizeof(i3_8opcode)) == 0)
 				return (_s + i);
-			}
-		}
+
 		return NULL;
 	}
 
@@ -140,94 +137,104 @@ namespace Bridge
 			}
 			lua_pop(L, 1);
 			break;
-		case LUA_TUSERDATA:
-            void *userdataInstance = index2adr(L, index)->value.p;
-            const auto iterator = robloxInstanceMap.find(userdataInstance);
+		case LUA_TUSERDATA: {
+				void *userdataInstance = index2adr(L, index)->value.p;
+				const auto iterator = robloxInstanceMap.find(userdataInstance);
 
-            if (iterator == robloxInstanceMap.cend()) // check if the iterator actually found something
-			    r_lua_pushnil(L); // if not, push nil (generally should not happen anyways /shrug)
-            else {
-                TValue newValue {}; // create a new TValue
+				if (iterator == robloxInstanceMap.cend()) // check if the iterator actually found something
+					r_lua_pushnil(rL); // if not, push nil (generally should not happen anyways /shrug)
+				else {
+					TValue newValue{}; // create a new TValue
 
-                newValue.value.p = iterator->second; // set the pointer to the old userdata
-                newValue.tt = R_LUA_TUSERDATA; // set the type to the roblox userdata type
+					newValue.value.p = iterator->second; // set the pointer to the old userdata
+					newValue.tt = R_LUA_TUSERDATA; // set the type to the roblox userdata type
 
-                pushObject(L, &newValue); // push xd
-            }
-
-			break;
-		default: break;
+					pushObject(L, &newValue); // push xd
+				}
+				break;
+			}
 		}
 	}
 	void push(DWORD rL, lua_State* L, int index) // push from ROBLOX to vanilla
 	{
 		switch (r_lua_type(rL, index))
 		{
-		case R_LUA_TLIGHTUSERDATA:
-			lua_pushlightuserdata(L, nullptr);
-			break;
-		case R_LUA_TNIL:
-			lua_pushnil(L);
-			break;
-		case R_LUA_TNUMBER:
-			lua_pushnumber(L, r_lua_tonumber(rL, index));
-			break;
-		case R_LUA_TBOOLEAN:
-			lua_pushboolean(L, r_lua_toboolean(rL, index));
-			break;
-		case R_LUA_TSTRING:
-			lua_pushstring(L, r_lua_tostring(rL, index));
-			break;
-		case R_LUA_TTHREAD:
-			lua_newthread(L);
-			break;
-		case R_LUA_TFUNCTION:
-			r_lua_pushvalue(rL, index);
-			lua_pushnumber(L, r_luaL_ref(rL, LUA_REGISTRYINDEX));
-			lua_pushcclosure(L, vanillaFunctionBridge, 1);
-			break;
-		case R_LUA_TTABLE:
-			r_lua_pushvalue(rL, index);
-			lua_newtable(L);
-			r_lua_pushnil(rL);
-			while (r_lua_next(rL, -2) != R_LUA_TNIL)
-			{
-				Bridge::push(rL, L, -2);
-				Bridge::push(rL, L, -1);
-				lua_settable(L, -3);
+			case R_LUA_TLIGHTUSERDATA:
+				lua_pushlightuserdata(L, nullptr);
+				break;
+			case R_LUA_TNIL:
+				lua_pushnil(L);
+				break;
+			case R_LUA_TNUMBER:
+				lua_pushnumber(L, r_lua_tonumber(rL, index));
+				break;
+			case R_LUA_TBOOLEAN:
+				lua_pushboolean(L, r_lua_toboolean(rL, index));
+				break;
+			case R_LUA_TSTRING:
+				lua_pushstring(L, r_lua_tostring(rL, index));
+				break;
+			case R_LUA_TTHREAD:
+				lua_newthread(L);
+				break;
+			case R_LUA_TFUNCTION:
+				r_lua_pushvalue(rL, index);
+				lua_pushnumber(L, r_luaL_ref(rL, LUA_REGISTRYINDEX));
+				lua_pushcclosure(L, vanillaFunctionBridge, 1);
+				break;
+			case R_LUA_TTABLE:
+				r_lua_pushvalue(rL, index);
+				lua_newtable(L);
+				r_lua_pushnil(rL);
+				while (r_lua_next(rL, -2) != R_LUA_TNIL)
+				{
+					Bridge::push(rL, L, -2);
+					Bridge::push(rL, L, -1);
+					lua_settable(L, -3);
+					r_lua_pop(rL, 1);
+				}
 				r_lua_pop(rL, 1);
+				break;
+			case R_LUA_TUSERDATA: {
+				r_lua_pushvalue(rL, index);
+				const auto robloxPtr = r_lua_index2adr(rL, -1);
+				const auto iterator = vanillaInstanceMap.find(robloxPtr);
+
+				if (iterator == vanillaInstanceMap.cend()) {
+					const auto newUserdata = lua_newuserdata(L, 0);
+
+					vanillaInstanceMap[robloxPtr] = newUserdata;
+					robloxInstanceMap[newUserdata] = robloxPtr;
+
+					r_lua_getmetatable(rL, -1);
+					push(rL, L, -1);
+					r_lua_pop(rL, 1);
+
+					lua_setmetatable(L, -2);
+
+					lua_pushnumber(L, registry);
+					lua_pushvalue(L, -2);
+
+					lua_settable(L, LUA_REGISTRYINDEX);
+
+					r_lua_pushnumber(rL, registry);
+					r_lua_pushvalue(rL, -2);
+					r_lua_settable(rL, LUA_REGISTRYINDEX);
+
+					++registry;
+				}
+				else {
+					TValue newValue{};
+
+					newValue.value.p = iterator->second;
+					newValue.tt = LUA_TUSERDATA;
+
+					pushObject(L, &newValue);
+				}
+
+				r_lua_pop(rL, 1);
+				break;
 			}
-			r_lua_pop(rL, 1);
-			break;
-		case R_LUA_TUSERDATA:
-			r_lua_pushvalue(rL, index);
-            const auto robloxPtr = r_lua_index2adr(rL, -1); 
-            const auto iterator = vanillaInstanceMap.find(robloxPtr); 
-
-            if (iterator == vanillaInstanceMap.cend()) {
-                const auto newUserdata = lua_newuserdata(L, 0);
-
-                vanillaInstanceMap[robloxPtr] = newUserdata;
-                robloxInstanceMap[newUserdata] = robloxPtr;
-
-                r_lua_getmetatable(rL, -1);
-                push(rL, L, -1);
-                lua_setmetatable(L, -2);
-
-                lua_setfield(L, LUA_REGISTRYINDEX, std::to_string(++registry));
-                r_lua_setfield(rL, LUA_REGISTRYINDEX, std::to_string(registry));
-            } else {
-                TValue newValue {};
-
-                newValue.value.p = iterator->second;
-                newValue.tt = LUA_TUSERDATA;
-
-                pushObject(L, &newValue);
-            }
-
-			r_lua_pop(rL, 1);
-			break;
-		default: break;
 		}
 	}
 
@@ -247,9 +254,6 @@ namespace Bridge
 			Bridge::push(thread, L, arg);
 		return lua_resume(L, nargs);
 	}
-
-
-
 
 	int vanillaFunctionBridge(lua_State* L)
 	{
@@ -283,8 +287,6 @@ namespace Bridge
 			}
 			printf("RVX VANILLA ERROR: %s\n", r_lua_tostring(rL, -1));
 			return 0;
-			MessageBoxA(NULL, "SUCCESS VANILLA", "vanillabridge", NULL);
-			delete[] errormessage;
 		}
 
 		int args = 0;
@@ -293,13 +295,11 @@ namespace Bridge
 			Bridge::push(rL, L, arg);
 
 		r_lua_settop(rL, 0);
-
 		return args;
 	}
 
 	int rbxFunctionBridge(DWORD rL)
 	{
-
 		lua_pushstring(m_L, std::to_string(++registry).c_str());
 		lua_State* L = lua_newthread(m_L);
 		lua_settable(m_L, LUA_REGISTRYINDEX);
@@ -309,30 +309,25 @@ namespace Bridge
 		lua_rawgeti(L, LUA_REGISTRYINDEX, key);
 
 		for (int arg = 1; arg <= r_lua_gettop(rL); ++arg)
-			Bridge::push(rL, L, arg);
+			push(rL, L, arg);
 
 		switch (lua_pcall(L, r_lua_gettop(rL), LUA_MULTRET, 0))
 		{
-		
-		
-		case LUA_YIELD:
-
-			r_lua_pushlightuserdata(m_rL, (void*)L);
-			r_lua_pushcclosure(m_rL, Bridge::int3breakpoints[1], 1);
-			return -1;
-		case LUA_ERRRUN:
+			case LUA_YIELD:
+				r_lua_pushlightuserdata(m_rL, (void*)L);
+				r_lua_pushcclosure(m_rL, int3breakpoints[1], 1);
+				return -1;
+			case LUA_ERRRUN:
 				printf("RVX ROBLOX ERROR: %s\n", lua_tostring(L, -1));
 				return -1;
-		default: break;
 		}
 
 		int args = 0;
 
 		for (int arg = 1; arg <= lua_gettop(L); ++arg, ++args)
-			Bridge::push(L, rL, arg);
+			push(L, rL, arg);
 
 		lua_settop(L, 0);
-
 		return args;
 	}
 }
