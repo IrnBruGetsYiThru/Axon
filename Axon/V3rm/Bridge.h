@@ -2,6 +2,8 @@
 #include "globals.h"
 #include <string>
 #include <vector>
+#include <unordered_map>
+
 #include "r_lua.h"
 extern "C" {
 #include "Lua\lua.h"
@@ -21,6 +23,9 @@ namespace Bridge
 	DWORD m_rL;
 	lua_State* m_L;
 
+    std::unordered_map<void*, void*> robloxInstanceMap;
+    std::unordered_map<void*, void*> vanillaInstanceMap;
+
 	void push(lua_State* L, DWORD rL, int index);
 	void push(DWORD rL, lua_State* L, int index);
 
@@ -36,6 +41,19 @@ namespace Bridge
 
 namespace Bridge
 {
+    void pushObject(DWORD pRobloxState, TValue *value) {
+        auto &top = *reinterpret_cast<TValue**>(reinterpret_cast<std::uintptr_t>(pVanilla_state) + Offsets::LuaState::top);
+
+        *top = *value;
+        ++top;
+    }
+
+    void pushObject(lua_State *pVanillaState, TValue *value) {
+        auto &top = pVanillaState->top;
+
+        *top = *value;
+        ++top;
+    }
 
 	LONG WINAPI vehHandler(PEXCEPTION_POINTERS ex)
 	{
@@ -79,14 +97,12 @@ namespace Bridge
 		AddVectoredExceptionHandler(1, vehHandler);
 	}
 
-	void push(lua_State* L, DWORD rL, int index)
+	void push(lua_State* L, DWORD rL, int index) // push to ROBLOX
 	{
-		printf("ROBLOX: %d\n", lua_type(L, index));
 		switch (lua_type(L, index))
 		{
 		case LUA_TLIGHTUSERDATA:
 			r_lua_pushlightuserdata(rL, nullptr);
-
 			break;
 		case LUA_TNIL:
 			r_lua_pushnil(rL);
@@ -122,20 +138,26 @@ namespace Bridge
 			lua_pop(L, 1);
 			break;
 		case LUA_TUSERDATA:
-			lua_pushvalue(L, index);
-			lua_gettable(L, LUA_REGISTRYINDEX);
-			if (!lua_isnil(L, -1))
-				r_lua_getfield(rL, LUA_REGISTRYINDEX, lua_tostring(L, -1));
-			else
-				r_lua_newuserdata(rL, 0);
-			lua_pop(L, 1);
+            void *userdataInstance = index2adr(L, index)->value.p;
+            const auto iterator = robloxInstanceMap.find(userdataInstance);
+
+            if (iterator == robloxInstanceMap.cend()) // check if the iterator actually found something
+			    r_lua_pushnil(L); // if not, push nil (generally should not happen anyways /shrug)
+            else {
+                TValue newValue {}; // create a new TValue
+
+                newValue.value.p = *iterator; // set the pointer to the old userdata
+                newValue.tt = R_LUA_TUSERDATA; // set the type to the roblox userdata type
+
+                pushObject(L, &newValue); // push xd
+            }
+
 			break;
 		default: break;
 		}
 	}
-	void push(DWORD rL, lua_State* L, int index)
+	void push(DWORD rL, lua_State* L, int index) // push from ROBLOX to vanilla
 	{
-		printf("VANILLA: %d\r\n", r_lua_type(rL, index));
 		switch (r_lua_type(rL, index))
 		{
 		case R_LUA_TLIGHTUSERDATA:
@@ -176,20 +198,31 @@ namespace Bridge
 			break;
 		case R_LUA_TUSERDATA:
 			r_lua_pushvalue(rL, index);
-			r_lua_pushstring(rL, std::to_string(++registry).c_str());
+            const auto robloxPtr = r_lua_index2adr(rL, -1); 
+            const auto iterator = vanillaInstanceMap.find(robloxPtr); 
 
-			r_lua_pushvalue(rL, -2);
-			r_lua_settable(rL, LUA_REGISTRYINDEX);
-			r_lua_pop(rL, 1);
-			lua_newuserdata(L, 0);
-			lua_pushvalue(L, -1);
-			lua_pushstring(L, std::to_string(registry).c_str());
-			lua_settable(L, LUA_REGISTRYINDEX);
-			r_lua_getmetatable(rL, index);
+            if (iterator == vanillaInstanceMap.cend()) {
+                const auto newUserdata = lua_newuserdata(L, 0);
 
-			Bridge::push(rL, L, -1);
+                vanillaInstanceMap[robloxPtr] = newUserdata;
+                robloxInstanceMap[newUserdata] = robloxPtr;
+
+                r_lua_getmetatable(rL, -1);
+                push(rL, L, -1);
+                lua_setmetatable(L, -2);
+
+                lua_setfield(L, LUA_REGISTRYINDEX, std::to_string(++registry));
+                r_lua_setfield(rL, LUA_REGISTRYINDEX, std::to_string(registry));
+            } else {
+                TValue newValue {};
+
+                newValue.value.p = *iterator;
+                newValue.tt = LUA_TUSERDATA;
+
+                pushObject(L, &newValue);
+            }
+
 			r_lua_pop(rL, 1);
-			lua_setmetatable(L, -2);
 			break;
 		default: break;
 		}
