@@ -246,7 +246,6 @@ namespace Bridge
 		for (int arg = 1; arg <= nargs; ++arg)
 			Bridge::push(thread, L, arg);
 		return lua_resume(L, nargs);
-
 	}
 
 
