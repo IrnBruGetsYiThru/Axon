@@ -17,8 +17,6 @@ extern "C" {
 	#include "Lua\llimits.h"
 }
 
-
-
 int registry;
 
 namespace Bridge
@@ -46,13 +44,6 @@ namespace Bridge
 {
     void pushObject(DWORD pRobloxState, TValue *value) {
         auto &top = *(TValue**)(pRobloxState + R_LUA_TOP);
-
-        *top = *value;
-        ++top;
-    }
-
-    void pushObject(lua_State *pVanillaState, TValue *value) {
-        auto &top = pVanillaState->top;
 
         *top = *value;
         ++top;
@@ -149,7 +140,7 @@ namespace Bridge
 					newValue.value.p = iterator->second; // set the pointer to the old userdata
 					newValue.tt = R_LUA_TUSERDATA; // set the type to the roblox userdata type
 
-					pushObject(L, &newValue); // push xd
+					pushObject(rL, &newValue); // push xd
 				}
 				break;
 			}
@@ -229,7 +220,7 @@ namespace Bridge
 					newValue.value.p = iterator->second;
 					newValue.tt = LUA_TUSERDATA;
 
-					pushObject(L, &newValue);
+					luaA_pushobject(L, &newValue);
 				}
 
 				r_lua_pop(rL, 1);
