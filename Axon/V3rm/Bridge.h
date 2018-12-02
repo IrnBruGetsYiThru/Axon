@@ -42,6 +42,8 @@ namespace Bridge
 
 namespace Bridge
 {
+    extern "C" TValue *index2adr (lua_State *L, int idx);
+
     void pushObject(DWORD pRobloxState, TValue *value) {
         auto &top = *reinterpret_cast<TValue**>(reinterpret_cast<std::uintptr_t>(pVanilla_state) + R_LUA_TOP);
 
