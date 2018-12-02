@@ -12,3 +12,6 @@
 #define R_LUA_TUSERDATA 8
 #define R_LUA_TPROTO 9
 #define R_LUA_TUPVALUE 10
+
+
+#define R_LUA_TOP 6
