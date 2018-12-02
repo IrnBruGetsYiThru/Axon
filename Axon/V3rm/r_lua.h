@@ -114,6 +114,8 @@ typedef void(__cdecl *rpushlight)(DWORD, void*);
 rpushlight r_lua_pushlightuserdata = (rpushlight)(unprotect(x(0x74cfd0)));
 typedef void*(__cdecl *touserdata)(DWORD, int);
 touserdata r_lua_touserdata =(touserdata)Retcheck::Unprotect(x(0x74E630), true);
+typedef void*(__cdecl *settable)(DWORD, int, const char*);
+settable r_lua_settable =(settable)Retcheck::Unprotect(x(0x123456), true);
 
 /*
 Sehchainfaker
