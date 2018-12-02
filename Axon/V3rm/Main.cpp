@@ -149,11 +149,6 @@ void main()
 	m_L = luaL_newstate();
 	Bridge::VehHandlerpush();
 	luaL_openlibs(m_L);
-	luaL_newmetatable(m_L, "garbagecollector");
-	lua_pushcfunction(m_L, UserDataGC);
-	lua_setfield(m_L, -2, "__gc");
-	lua_pushvalue(m_L, -1);
-	lua_setfield(m_L, -2, "__index");
 	PushGlobal(m_rL, m_L, "game");
 	PushGlobal(m_rL, m_L, "Game");
 	PushGlobal(m_rL, m_L, "workspace");
