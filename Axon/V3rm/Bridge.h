@@ -42,7 +42,7 @@ namespace Bridge
 namespace Bridge
 {
     void pushObject(DWORD pRobloxState, TValue *value) {
-        auto &top = *reinterpret_cast<TValue**>(reinterpret_cast<std::uintptr_t>(pVanilla_state) + Offsets::LuaState::top);
+        auto &top = *reinterpret_cast<TValue**>(reinterpret_cast<std::uintptr_t>(pVanilla_state) + R_LUA_TOP);
 
         *top = *value;
         ++top;
