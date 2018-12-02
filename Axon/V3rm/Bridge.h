@@ -237,11 +237,6 @@ namespace Bridge
 		const int nargs = lua_gettop(thread);
 		lua_xmove(thread, L, nargs);
 		return lua_resume(L, nargs);
-		lua_newtable(L);
-        	lua_pushstring(L, "This metatable is locked");
-        	lua_setfield(L, -2, "__metatable");
-		lua_close(L);
-
 	}
 
 	int resumea(DWORD thread)
@@ -251,7 +246,6 @@ namespace Bridge
 		for (int arg = 1; arg <= nargs; ++arg)
 			Bridge::push(thread, L, arg);
 		return lua_resume(L, nargs);
-		lua_close(L);
 
 	}
 
@@ -302,8 +296,6 @@ namespace Bridge
 		r_lua_settop(rL, 0);
 
 		return args;
-		lua_close(L);
-		MessageBoxA(NULL, "SUCCESS VANILLA 2", "vanillabridge", NULL);
 	}
 
 	int rbxFunctionBridge(DWORD rL)
@@ -343,7 +335,5 @@ namespace Bridge
 		lua_settop(L, 0);
 
 		return args;
-		lua_close(L);
-
 	}
 }
