@@ -14,4 +14,4 @@
 #define R_LUA_TUPVALUE 10
 
 
-#define R_LUA_TOP 6
+#define R_LUA_TOP 32
