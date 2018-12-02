@@ -7,7 +7,6 @@
 #include "r_lua.h"
 extern "C" {
 #include "Lua\lua.h"
-#include "Lua\lapi.h"
 #include "Lua\lua.hpp"
 #include "Lua\lualib.h"
 #include "Lua\lstate.h"
@@ -43,6 +42,8 @@ namespace Bridge
 
 namespace Bridge
 {
+    extern "C" TValue *index2adr (lua_State *L, int idx);
+
     void pushObject(DWORD pRobloxState, TValue *value) {
         auto &top = *reinterpret_cast<TValue**>(reinterpret_cast<std::uintptr_t>(pVanilla_state) + R_LUA_TOP);
 
@@ -148,7 +149,7 @@ namespace Bridge
             else {
                 TValue newValue {}; // create a new TValue
 
-                newValue.value.p = *iterator; // set the pointer to the old userdata
+                newValue.value.p = iterator->second; // set the pointer to the old userdata
                 newValue.tt = R_LUA_TUSERDATA; // set the type to the roblox userdata type
 
                 pushObject(L, &newValue); // push xd
@@ -218,7 +219,7 @@ namespace Bridge
             } else {
                 TValue newValue {};
 
-                newValue.value.p = *iterator;
+                newValue.value.p = iterator->second;
                 newValue.tt = LUA_TUSERDATA;
 
                 pushObject(L, &newValue);
